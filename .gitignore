@@ -59,3 +59,8 @@ dkms.conf
 
 #
 libopencm3/*
+
+# Submodules
+cpputest/*
+freertos/*
+lib/*
