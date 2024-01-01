@@ -18,12 +18,16 @@
 
 #include "taskBlink.hpp"
 #include "OledTask.hpp"
+#include "turnTable.hpp"
+#include "multiplexDisplay.hpp"
 
 //#include "devices/gy521/gy521.hpp"
 
 
 HeartbeatTask heartbeat;
+TurntableTask turntable;
 OledTask oled;
+MultiplexDisplayTask display;
 
 
 void clock_setup(void)
@@ -70,11 +74,12 @@ static void nvic_setup(void)
     //nvic_set_priority(NVIC_USART2_IRQ, 2);
     //nvic_enable_irq(NVIC_USART2_IRQ);
 
-    nvic_set_priority(NVIC_DMA1_CHANNEL4_IRQ, 0);
-    nvic_enable_irq(NVIC_DMA1_CHANNEL4_IRQ);
+    // For SSD1036
+//    nvic_set_priority(NVIC_DMA1_CHANNEL4_IRQ, 0);
+//    nvic_enable_irq(NVIC_DMA1_CHANNEL4_IRQ);
 
-    nvic_set_priority(NVIC_TIM2_IRQ, 2);
-    nvic_enable_irq(NVIC_TIM2_IRQ);
+//    nvic_set_priority(NVIC_TIM2_IRQ, 2);
+//    nvic_enable_irq(NVIC_TIM2_IRQ);
 }
 
 static void gpio_setup(void)
@@ -135,7 +140,7 @@ int main(void)
     clock_setup();
     gpio_setup();
     usart_setup();
-    timer_setup();
+    //timer_setup();
     nvic_setup();
 
     /*
@@ -163,8 +168,10 @@ int main(void)
     */
 
     
-    heartbeat.start("heartbeat", configMINIMAL_STACK_SIZE, 1);
-    oled.start("oled", configMINIMAL_STACK_SIZE, 1);
+    heartbeat.start("heartbeat", configMINIMAL_STACK_SIZE, 0);  // 0 is lowest priority
+    //oled.start("oled", configMINIMAL_STACK_SIZE, 1);
+    turntable.start("turntable", configMINIMAL_STACK_SIZE, 100);
+    display.start("display", configMINIMAL_STACK_SIZE, 1);
 
     vTaskStartScheduler();
     for(;;);
