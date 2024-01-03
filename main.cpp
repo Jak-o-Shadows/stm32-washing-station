@@ -17,7 +17,7 @@
 #include "status.hpp"
 
 #include "taskBlink.hpp"
-#include "OledTask.hpp"
+//#include "OledTask.hpp"
 #include "turnTable.hpp"
 #include "multiplexDisplay.hpp"
 
@@ -26,7 +26,7 @@
 
 HeartbeatTask heartbeat;
 TurntableTask turntable;
-OledTask oled;
+//OledTask oled;
 MultiplexDisplayTask display;
 
 
@@ -238,6 +238,7 @@ void tim2_isr(void)
     }
 }
 
+/*
 void dma1_channel4_isr(void)
 {
     // I2C Transmit DMA channel
@@ -305,3 +306,5 @@ void dma1_channel4_isr(void)
     gpio_toggle(GPIOC, GPIO14);
 
 }
+*/
+

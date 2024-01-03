@@ -179,13 +179,14 @@ $(BINARY).elf: $(OBJS)
 	@#printf "  CC      $(*).c\n"
 	$(Q) $(CC) $(CFLAGS) $(INCLUDE_PATHS) $(ARCH_FLAGS) -o $(*).o -c $(*).c
 
+
 %.o: %.cpp
 	@#printf "  CXX      $(*).cpp\n"
 	$(Q) $(CXX) $(CPPFLAGS) $(INCLUDE_PATHS) $(ARCH_FLAGS) -o $(*).o -c $(*).cpp
 
 clean:
 	@#printf "  CLEAN\n"
-	$(Q)$(RM) $(OBJS)
+#	$(Q)$(RM) $(OBJS)
 	$(Q)$(RM) *.o *.d *.elf *.bin *.hex *.srec *.list *.map
 
 
