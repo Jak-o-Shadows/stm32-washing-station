@@ -14,7 +14,7 @@ SECTIONS
   *(.rodata*)
   . = ALIGN(4);
  } >rom
- .preinit_array : {
+ .preinit_array (READONLY): {
   . = ALIGN(4);
   __preinit_array_start = .;
   KEEP (*(.preinit_array))
