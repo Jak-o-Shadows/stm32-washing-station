@@ -70,7 +70,7 @@ OBJS += $(HL_LIBS_C:.c=.o) $(HL_LIBS_CPP:.cpp=.o)
 
 
 
-toolchainPath ?=
+toolchainPath ?= 'E:\Tools\Arm GNU Toolchain arm-none-eabi\13.2 Rel1\bin\'
 
 PREFIX		?= $(toolchainPath)arm-none-eabi
 
@@ -103,6 +103,7 @@ CFLAGS += -T $(LDSCRIPT)
 CFLAGS += -DSTM32F1
 
 CPPFLAGS =
+CPPFlags += -std=c++20
 CPPFLAGS += -g
 CPPFLAGS += -fno-common -ffunction-sections -fdata-sections
 CPPFLAGS += -MD

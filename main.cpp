@@ -13,6 +13,7 @@
 // FreeRTOS includes
 #include "FreeRTOS.h"
 #include "task.h"
+#include "stream_buffer.h"
 
 #include "status.hpp"
 
@@ -20,6 +21,7 @@
 //#include "OledTask.hpp"
 #include "turnTable.hpp"
 #include "multiplexDisplay.hpp"
+#include "commandHandler.hpp"
 
 //#include "devices/gy521/gy521.hpp"
 
@@ -28,14 +30,24 @@ HeartbeatTask heartbeat;
 TurntableTask turntable;
 //OledTask oled;
 MultiplexDisplayTask display;
+CommandHandlerTask commandHandler;
+
+
+// Set up the stream buffers for the Uart ISR <-> task
+#define UART_STREAM_BUFFER_SIZE_BYTES 1024
+static uint8_t uartRxStreamBufferMemory[ UART_STREAM_BUFFER_SIZE_BYTES + 1 ];
+static uint8_t uartTxStreamBufferMemory[ UART_STREAM_BUFFER_SIZE_BYTES + 1 ];
+StaticStreamBuffer_t uartRxStreamBufferStruct;
+StaticStreamBuffer_t uartTxStreamBufferStruct;
+StreamBufferHandle_t uartRxStreamBuffer;
+StreamBufferHandle_t uartTxStreamBuffer;
+
+
 
 
 void clock_setup(void)
 {
     rcc_clock_setup_in_hse_8mhz_out_72mhz();
-
-    /* Enable GPIOA clock (for LED GPIOs). */
-    rcc_periph_clock_enable(RCC_GPIOC);
 
     rcc_periph_clock_enable(RCC_GPIOA);
 
@@ -51,31 +63,31 @@ void clock_setup(void)
 
 void usart_setup(void)
 {
-    rcc_periph_clock_enable(RCC_GPIOA);
-    rcc_periph_clock_enable(RCC_USART2);
+    rcc_periph_clock_enable(RCC_GPIOB);
+    rcc_periph_clock_enable(RCC_USART1);
 
-    gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO2); //USART 2 TX is A2
-    gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO3);                   //USART 2 RX is A3
+    gpio_set_mode(RCC_GPIOB, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO2); //USART 2 TX is A2
+    gpio_set_mode(RCC_GPIOB, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO3);                   //USART 2 RX is A3
 
-    usart_set_baudrate(USART2, 9600);
-    usart_set_databits(USART2, 8);
-    usart_set_stopbits(USART2, USART_STOPBITS_1);
-    usart_set_parity(USART2, USART_PARITY_NONE);
-    usart_set_mode(USART2, USART_MODE_TX_RX);
-    usart_set_flow_control(USART2, USART_FLOWCONTROL_NONE);
+    usart_set_baudrate(USART1, 9600);
+    usart_set_databits(USART1, 8);
+    usart_set_stopbits(USART1, USART_STOPBITS_1);
+    usart_set_parity(USART1, USART_PARITY_NONE);
+    usart_set_mode(USART1, USART_MODE_TX_RX);
+    usart_set_flow_control(USART1, USART_FLOWCONTROL_NONE);
     //enable interrupt rx
-    USART_CR1(USART2) |= USART_CR1_RXNEIE;
+    USART_CR1(USART1) |= USART_CR1_RXNEIE;
 
-    usart_enable(USART2);
+    usart_enable(USART1);
 }
 
 static void nvic_setup(void)
 {
-    //nvic_set_priority(NVIC_USART2_IRQ, 2);
-    //nvic_enable_irq(NVIC_USART2_IRQ);
+    nvic_set_priority(NVIC_USART1_IRQ, 2);
+    nvic_enable_irq(NVIC_USART1_IRQ);
 
     // For SSD1036
-//    nvic_set_priority(NVIC_DMA1_CHANNEL4_IRQ, 0);
+//    nvic_set_priority(NVIC_DMA1_CHANNEL4_IRQ, 0);  // Probably wrong, I changed the i2C pins
 //    nvic_enable_irq(NVIC_DMA1_CHANNEL4_IRQ);
 
 //    nvic_set_priority(NVIC_TIM2_IRQ, 2);
@@ -84,50 +96,11 @@ static void nvic_setup(void)
 
 static void gpio_setup(void)
 {
-    gpio_set(GPIOC, GPIO13);
-
-    /* Setup GPIO for LED use. */
-    gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_50_MHZ,
-                  GPIO_CNF_OUTPUT_PUSHPULL, GPIO13 | GPIO14);
-
     //setup i2c pins
     gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
                   GPIO_CNF_OUTPUT_ALTFN_OPENDRAIN,
-                  GPIO10 | GPIO11); //B10 =SCL, B11=SDA
-                                    //		  GPIO6 | GPIO7);
+                  GPIO8 | GPIO9); //B8 =SCL, B9=SDA
 }
-
-static void timer_setup(void)
-{
-
-    rcc_periph_clock_enable(RCC_TIM2);
-
-    rcc_periph_reset_pulse(RST_TIM2);
-
-    //Timer global mode:
-    //	no divider
-    //	alignment edge
-    //	direction up
-    timer_set_mode(TIM2, TIM_CR1_CKD_CK_INT, TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
-
-    // Note that TIM2 on APB1 is running at double frequency according to
-    //	https://github.com/libopencm3/libopencm3-examples/blob/master/examples/stm32/f1/stm32-h103/timer/timer.c
-    timer_set_prescaler(TIM2, ((rcc_apb1_frequency * 2) / 10000));
-
-    // Disable preload
-    timer_disable_preload(TIM2);
-    timer_continuous_mode(TIM2);
-
-    // Count the full range, as the compare value is used to set the value
-    timer_set_period(TIM2, 65535);
-
-    timer_set_oc_value(TIM2, TIM_OC1, 10); //was 10000
-
-    timer_enable_counter(TIM2);
-
-    timer_enable_irq(TIM2, TIM_DIER_CC1IE);
-}
-
 
 
 /////////////////////////////////////////////////////
@@ -137,10 +110,24 @@ static void timer_setup(void)
 int main(void)
 {
 
+    // Properly initiailse the streambuffers
+    uartRxStreamBuffer = xStreamBufferCreateStatic( UART_STREAM_BUFFER_SIZE_BYTES,
+                                               1,
+                                               uartRxStreamBufferMemory,
+                                               &uartRxStreamBufferStruct );
+    uartTxStreamBuffer = xStreamBufferCreateStatic( UART_STREAM_BUFFER_SIZE_BYTES,
+                                               1,
+                                               uartTxStreamBufferMemory,
+                                               &uartTxStreamBufferStruct );
+    commandHandler.uartRxStreamBufferHandle = &uartRxStreamBuffer;
+    commandHandler.uartTxStreamBufferHandle = &uartTxStreamBuffer;
+
+
+
+
     clock_setup();
     gpio_setup();
     usart_setup();
-    //timer_setup();
     nvic_setup();
 
     /*
@@ -172,6 +159,7 @@ int main(void)
     //oled.start("oled", configMINIMAL_STACK_SIZE, 1);
     turntable.start("turntable", configMINIMAL_STACK_SIZE, 100);
     display.start("display", configMINIMAL_STACK_SIZE, 1);
+    commandHandler.start("commandHandler", configMINIMAL_STACK_SIZE, 2);
 
     vTaskStartScheduler();
     for(;;);
@@ -186,57 +174,53 @@ int main(void)
 
 // Interrupt Functions
 
-void usart2_isr(void)
+void usart1_isr(void)
 {
     static uint8_t data = 'A';
     static uint8_t reply = 0;
 
-    /* Check if we were called because of RXNE. */
-    if (((USART_CR1(USART2) & USART_CR1_RXNEIE) != 0) &&
-        ((USART_SR(USART2) & USART_SR_RXNE) != 0))
-    {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE; /* Initialised to pdFALSE. */
 
+    /* Check if we were called because of RXNE. */
+    if (((USART_CR1(USART1) & USART_CR1_RXNEIE) != 0) &&
+        ((USART_SR(USART1) & USART_SR_RXNE) != 0))
+    {
         // Receieve the data, using the MiniSSC protocol
         //	This protocol has a header byte (0xFF), followed
         //	by a number (0->254) followed by a number (0-254)
-        data = usart_recv(USART2);
-        //reply = dobyte(data);
-
-        /* Enable transmit interrupt so it sends back the data. */
-        USART_CR1(USART2) |= USART_CR1_TXEIE;
+        data = usart_recv(USART1);
+        size_t numBytesSent = xStreamBufferSendFromISR(uartRxStreamBuffer,
+                                                    &data,
+                                                    1,
+                                                    &xHigherPriorityTaskWoken);
+        if (numBytesSent != 1){
+            // Could not sent the data? Maybe it's full?
+        }
     }
 
     /* Check if we were called because of TXE. */
-    if (((USART_CR1(USART2) & USART_CR1_TXEIE) != 0) &&
-        ((USART_SR(USART2) & USART_SR_TXE) != 0))
+    if (((USART_CR1(USART1) & USART_CR1_TXEIE) != 0) &&
+        ((USART_SR(USART1) & USART_SR_TXE) != 0))
     {
 
-        /* Indicate that we are sending out data. */
+        // Indicate that we are sending out data.
         // gpio_toggle(GPIOA, GPIO7);
 
-        /* Put data into the transmit register. */
-        usart_send(USART2, reply);
+        // Put data into the transmit register.
+        uint8_t toSendBuf[10];
+        size_t numBytesToSend = xStreamBufferReceiveFromISR(uartTxStreamBuffer,
+                                                            &toSendBuf[0],
+                                                            10,
+                                                            &xHigherPriorityTaskWoken);
+        for (int idx; idx<numBytesToSend; idx++) {
+            usart_send(USART1, toSendBuf[idx]);
+        }
 
-        /* Disable the TXE interrupt as we don't need it anymore. */
-        USART_CR1(USART2) &= ~USART_CR1_TXEIE;
+        // Disable the TXE interrupt as we don't need it anymore.
+        USART_CR1(USART1) &= ~USART_CR1_TXEIE;
     }
 }
 
-void tim2_isr(void)
-{
-    // This timer ticks every 1ms
-    if (timer_get_flag(TIM2, TIM_SR_CC1IF))
-    {
-        timer_clear_flag(TIM2, TIM_SR_CC1IF);
-
-        // Setup next compare time
-        uint16_t compare_time = timer_get_counter(TIM2);
-        timer_set_oc_value(TIM2, TIM_OC1, 10 + compare_time);
-
-        // Debug toggle LED
-        gpio_toggle(GPIOC, GPIO13);
-    }
-}
 
 /*
 void dma1_channel4_isr(void)
