@@ -22,6 +22,7 @@
 #include "turnTable.hpp"
 #include "multiplexDisplay.hpp"
 #include "commandHandler.hpp"
+#include "mainTask.hpp"
 
 //#include "devices/gy521/gy521.hpp"
 
@@ -31,6 +32,7 @@ TurntableTask turntable;
 //OledTask oled;
 MultiplexDisplayTask display;
 CommandHandlerTask commandHandler;
+MainTask mainTask;
 
 
 // Set up the stream buffers for the Uart ISR <-> task
@@ -160,6 +162,7 @@ int main(void)
     turntable.start("turntable", configMINIMAL_STACK_SIZE, 100);
     display.start("display", configMINIMAL_STACK_SIZE, 1);
     commandHandler.start("commandHandler", configMINIMAL_STACK_SIZE, 2);
+    mainTask.start("mainTask", configMINIMAL_STACK_SIZE, 3);
 
     vTaskStartScheduler();
     for(;;);

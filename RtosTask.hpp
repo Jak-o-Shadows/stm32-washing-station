@@ -26,6 +26,8 @@ protected:
 		vTaskDelay(time_ms/portTICK_PERIOD_MS);
 	}
 
+	TaskHandle_t xHandle = 0;
+
 private:
 	virtual void setup() {}
 	virtual void loop() {}
@@ -46,7 +48,6 @@ private:
 		vTaskDelete(taskObject->xHandle);
 	}
 	bool stopCalled = false;
-	TaskHandle_t xHandle = 0;
 };
 
 #endif /* TASKS_RTOSTASK_H_ */
